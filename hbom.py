@@ -12,8 +12,9 @@ import re
 import sqlite3
 
 _settings_path = os.path.expanduser('~/.hbom/settings.json')
+
 _default_settings = {
-    'dbpath': os.path.expanduser('~/.hbom/saves.db'),
+    'dbpath': os.path.expanduser('~/.hbom/hbom_database.db'),
     'headerpatterns': {
         'description': 'desc\\.?(ription)?',
         'product identifier': '(mfg\\.?|manufacturer) p(art)?[ /.]?n(um)?\\.?(ber)?',
@@ -26,36 +27,35 @@ _default_settings = {
     }
 }
 
-# Typst document building blocks
+typ_indent = 2  # typst document indent
 
-# Typst building blocks
-typ_comment_block = '''// {}
+
+def typ_template(path, datestr, columns, pre_header, refd_col):
+    return '''// {}
 // Highlighted BOM generated using hbom
 // Created on {}
-'''
 
-typ_styling = '''
 /* Document styling */
 
 #set page(
-    paper: "us-letter",
-    flipped: true,
-    margin: (top: .2in + 2em, rest: .2in),
-    header: [{} #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
-    header-ascent: 1em,
+  paper: "us-letter",
+  flipped: true,
+  margin: (top: .2in + 2em, rest: .2in),
+  header: [{} #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
+  header-ascent: 1em,
 )
 
 #set text(
-    font: "DejaVu Sans Mono",
-    size: 8pt,
+  font: "DejaVu Sans Mono",
+  size: 8pt,
 )
 
 /* Table styling */
 
 #set table(
-    columns: {},
-    fill: (_, y) => if y == {} {{ gray }},
-    align: (x, y) => if x == {} and y != {} {{left}} else {{center}},
+  columns: {},
+  fill: (_, y) => if y == {} {{ gray }},
+  align: (x, y) => if x == {} and y != {} {{left}} else {{center}},
 )
 
 #set table.header(repeat: true)
@@ -73,31 +73,24 @@ typ_styling = '''
 #show <smdtop>: it => highlight(fill: lime, it)
 
 #show <smdbot>: it => highlight(fill: rgb("#dd97e8"), it)
-'''
 
-typ_table = '''
 /* Content */
 
 #table(
-    table.header(
-'''
+  table.header(
+'''.format(path, datestr, path, columns, pre_header, refd_col, pre_header, pre_header)
 
 
 # App object
 class App:
-    def __init__(self, bompath, locpath, outpath, header, skip_prompts):
-        if not os.path.isfile(bompath):
-            raise FileNotFoundError(f"BOM file '{bompath}' not found")
-        self._bompath = bompath
-        if locpath is not None:
-            if not os.path.isfile(locpath):
-                raise FileNotFoundError(f"component locations file '{locpath}' not found")
-        self._locpath = locpath
-        self._outpath = outpath
-        self._header = header
+    def __init__(self, bom_path, pick_path, output_path, pre_header, skip_prompts, verbose):
+        self._bom_path = bom_path
+        self._pick_path = pick_path
+        self._output_path = output_path
+        self._pre_header = pre_header
         self._skip_prompts = skip_prompts
+        self._verbose = verbose
 
-        # Get settings
         self._settings = _default_settings.copy()
 
     def settings_init(self, settings_path):
@@ -137,6 +130,7 @@ class App:
             cur.execute('''
                 CREATE TABLE pkgmem (
                     id TEXT NOT NULL UNIQUE,
+                    desc TEXT,
                     pkgtype TEXT
                 )''')
         except sqlite3.OperationalError:
@@ -144,68 +138,95 @@ class App:
 
         con.close()
 
-    def run(self):
+    def generate_hbom(self):
+        # Check if files exist
+        files_exist = True
+        if not os.path.isfile(self._bom_path):
+            print(f"BOM file '{self._bom_path}' not found")
+            files_exist = False
+        if self._pick_path:
+            if not os.path.isfile(self._pick_path):
+                print(f"pick and place file '{self._pick_path}' not found")
+                files_exist = False
+        if not files_exist:
+            print('exit')
+            return None
+
+        # Read BOM file
         pretable = []
         header = None
         table = []
-        col = {key: None for key in self._settings['headerpatterns']}
-        with open(self._bompath, 'r') as bom_file:
+        if self._verbose:
+            print(f"reading '{self._bom_path}...'")
+        with open(self._bom_path, 'r') as bom_file:
             bom_reader = csv.reader(bom_file)
-            for bom_i, row in enumerate(bom_reader):
+            for i, row in enumerate(bom_reader):
                 # Pretable
-                if bom_i < (self._header - 1):
+                if i < self._pre_header:
                     pretable.append(row)
 
                 # Header
-                elif bom_i == (self._header - 1):
+                elif i == self._pre_header:
                     header = row
 
                 # Rest of the table
                 else:
                     table.append(row)
+        if self._verbose:
+            print(f"finished reading '{self._bom_path}'")
 
-        # Parse header
-        print('parsing header...')
+        # Print header
+        if self._verbose:
+            print('header:', ', '.join([f'[{name}]' for name in header]))
+            print('selecting columns...')
 
         # Automatically locate columns using header names
+        col = {key: None for key in self._settings['headerpatterns']}
         for j, name in enumerate(header):
             patterns = self._settings['headerpatterns']
             for key in patterns:
                 if re.fullmatch(patterns[key], name, re.IGNORECASE):
                     if col[key] is None:
                         col[key] = j
+                        if self._verbose:
+                            print(f"found the {key} column: [{name}]")
 
         # Manually select any required columns not already found
         for key, value in col.items():
             if value is None:
-                print(f'\nUnable to find the {key} column.')
+                print(f"couldn't find the {key} column")
                 for j, name in enumerate(header):
-                    print(f'[{j}] {name}')
+                    print(f'{j}: [{name}]')
                 while True:
-                    ans = input(f"Pick a column [0-{len(header) - 1}] ('q' to exit): ")
+                    ans = input(f"select the {key} column [0-{len(header) - 1}] ('q' to quit): ")
                     if ans.lower() == 'q':
                         print('exit')
-                        return
+                        return None
                     try:
                         ans_int = int(ans)
                         if ans_int in range(len(header)):
                             col[key] = ans_int
+                            print(f"selected [{header[ans_int]}]")
                             break
                     except ValueError:
                         pass
                     print(f"invalid column '{ans}'")
 
         # Print selected columns
-        for key, value in col.items():
-            print(f"{key} column <- [{header[value]}]")
+        if self._verbose:
+            print('finished selecting columns')
 
         # Connect to database
         con = sqlite3.connect(self._settings['dbpath'])
         cur = con.cursor()
 
         # Parse table
-        print('parsing table...')
-        for row in table:
+        if self._verbose:
+            print('parsing table...')
+        for i, row in enumerate(table):
+            if self._verbose:
+                print(f"\nrow {i}:", ', '.join([f'[{value}]' for value in row]))
+
             desc = row[col['description']]
             pid = row[col['product identifier']]
             refds = row[col['reference designator']]
@@ -219,14 +240,25 @@ class App:
 
             # Highlight reference designators
             if refds:
+                if self._verbose:
+                    print('row contains loaded parts')
+
                 # Find package type: pth or smd
                 pkgtype = None
-                if desc:  # try searching the description
+                if self._verbose:
+                    print(f'determining package type for row {i}...')
+
+                # Try searching the description
+                if desc:
                     for key, patterns in self._settings['pkgpatterns'].items():
                         for pattern in patterns:
                             if re.search('\\b' + pattern + '\\b', desc, re.IGNORECASE):
                                 pkgtype = key
-                if pkgtype is None and pid:  # try the database
+                                if self._verbose:
+                                    print(f"'{desc}' -> {pkgtype}")
+
+                # Try the database
+                if pkgtype is None and pid:
                     result = cur.execute('''
                         SELECT pkgtype
                         FROM pkgmem
@@ -234,43 +266,65 @@ class App:
                         '''.format(pid)).fetchone()
                     if result:
                         pkgtype = result[0]
-                if pkgtype is None:  # lastly, prompt the user
-                    print('\nUnable to determine package type for the following product:')
+                        if self._verbose:
+                            print(f"found '{pid}' in database -> {pkgtype}")
+
+                # Lastly, prompt the user
+                if pkgtype is None:
+                    print('unable to determine package type for the following:')
+                    print()
                     for key, value in zip(header, row):
                         print(f'[{key}]: {value}')
+                    print()
                     if not self._skip_prompts:
                         while True:
-                            ans = input('Pick a package type {}: '.format(
-                                [key for key in self._settings['pkgpatterns']] + ['none']))
+                            ans = input(f"pick a package type for row {i} {[key for key in self._settings['pkgpatterns']] + ['none']} ('q' to quit): ")
+                            if ans.lower() == 'q':
+                                print('exit')
+                                return None
                             if ans.lower() == 'none':
                                 break
                             if ans.lower() in self._settings['pkgpatterns']:
                                 pkgtype = ans.lower()
+                                print(f'selected {pkgtype}')
                                 break
                             print(f"invalid package type '{ans}'")
 
-                        # Save decision
+                        # Save decision to database
                         if pkgtype is not None and pid:
                             while True:
-                                ans = input(f"Save '{pid}' as '{pkgtype}' to database? (y/n): ")
+                                ans = input(f"save '{pid}' as {pkgtype} to database? [y/n] ('q' to quit): ")
+                                if ans.lower() == 'q':
+                                    print('exit')
+                                    return None
                                 if ans.lower() == 'y':
                                     cur.execute('''
                                         INSERT INTO pkgmem
-                                        VALUES ('{}', '{}')
-                                        '''.format(pid, pkgtype))
+                                        VALUES ('{}', '{}', '{}')
+                                        '''.format(pid, desc, pkgtype))
                                     con.commit()
+                                    print(f"saved '{pid}' to database")
                                     break
                                 if ans.lower() == 'n':
                                     break
                                 print(f"invalid answer '{ans}'")
 
+                if self._verbose:
+                    print(f'finished determining package type for row {i} -> {pkgtype}')
+
                 # Build tagged reference designators list
                 tagged_list = []
+                if self._verbose:
+                    print(f'tagging reference designators for row {i}...')
                 for refd in [item.strip() for item in refds.split(',')]:
                     # Determine board face
                     face = None
-                    if self._locpath:  # try the pick-and-place file
-                        with open(self._locpath, 'r') as f:
+                    if self._verbose:
+                        print(f"determining board face for '{refd}'...")
+
+                    # Try the pick-and-place file
+                    if self._pick_path:
+                        with open(self._pick_path, 'r') as f:
                             for line in f:
                                 if re.search('\\b' + refd + '\\b', line):
                                     if re.search('\\btop', line, re.IGNORECASE):
@@ -279,73 +333,76 @@ class App:
                                     if re.search('\\bbot', line, re.IGNORECASE):
                                         face = 'bot'
                                         break
-                    if face is None:  # lastly, prompt the user
-                        print(f"\nUnable to determine face for '{refd}'.")
+                        if face and self._verbose:
+                            print(f"found face for '{refd}' in '{self._pick_path}' -> {face}")
+
+                    # lastly, prompt the user
+                    if face is None:
+                        print(f"unable to determine face for '{refd}'.")
                         if not self._skip_prompts:
+                            options = ['top', 'bot']
                             while True:
-                                ans = input(f"Enter face for '{refd}' ['top', 'bot', 'none']: ")
+                                ans = input(f"Enter face for '{refd}' {options + ['none']} ('q' to quit): ")
+                                if ans.lower() == 'q':
+                                    print('exit')
+                                    return None
                                 if ans.lower() == 'none':
                                     break
-                                if ans.lower() == 'top':
-                                    face = 'top'
-                                    break
-                                if ans.lower() == 'bot':
-                                    face = 'bot'
+                                if ans.lower() in options:
+                                    face = ans.lower()
+                                    print(f"selected '{face}'")
                                     break
                                 print(f"invalid face '{ans}'")
 
-                    # If undetermined, append an untagged reference designator
-                    if pkgtype is None or face is None:
-                        tagged_list.append(f'#box[{refd}]')
-                        continue
+                    if self._verbose:
+                        print(f"finished determining board face type for '{refd}' -> {face}")
 
-                    # Otherwise append a tagged reference designator
-                    tagged_list.append(f'#box[{refd}]<{pkgtype}{face}>')
+                    if pkgtype and face:
+                        tagged_list.append(f'#box[{refd}]<{pkgtype}{face}>')
+                        if self._verbose:
+                            print(f"tagged '{refd}' with <{pkgtype}{face}>")
+                    else:
+                        tagged_list.append(f'#box[{refd}]')
 
                 # replace the reference designators string
                 row[col['reference designator']] = ','.join(tagged_list)
+                if self._verbose:
+                    print(f'finished tagging reference designators for row {i}')
+        if self._verbose:
+            print('finished parsing table')
 
         # Close database
         con.close()
 
         # Generate typst document
-        output_path = self._outpath
+        output_path = self._output_path
         if output_path is None:
-            output_path = os.path.splitext(os.path.basename(self._bompath))[0] + '.typ'
-        print(f"writing to '{output_path}'...")
+            output_path = os.path.splitext(
+                os.path.basename(self._bom_path))[0] + '_highlighted.typ'
+        if self._verbose:
+            print(f"writing to '{output_path}'...")
         dir = os.path.dirname(output_path)
         if dir:
             os.makedirs(dir, exist_ok=True)
         with open(output_path, 'w') as f:
-            # Comment Block
-            f.write(typ_comment_block.format(
-                os.path.basename(output_path),
-                datetime.now().strftime("%d %b %Y")))
+            # Template
+            f.write(typ_template(output_path, datetime.now().strftime("%d %b %Y"), len(header),
+                    self._pre_header, col['reference designator']))
 
-            # Styling
-            f.write(typ_styling.format(
-                output_path,
-                len(header),
-                self._header - 1,
-                col['reference designator'],
-                self._header - 1,
-                self._header - 1))
-
-            # Table
-            f.write(typ_table.format(os.path.splitext(os.path.basename(output_path))[0]))
+            # Fill table
             for row in pretable:
-                f.write(7 * ' ')
+                f.write((2 * typ_indent - 1) * ' ')
                 for item in row:
                     item = item.replace('#', '\\#').replace('@', '\\@')
                     f.write(f' [{item}],')
                 f.write('\n')
-            f.write(7 * ' ')
+            f.write((2 * typ_indent - 1) * ' ')
             for item in header:
                 item = item.replace('#', '\\#').replace('@', '\\@')
                 f.write(f' [{item}],')
-            f.write('\n    ),\n')
+            f.write('\n' + typ_indent * ' ' + '),\n')
             for row in table:
-                f.write(3 * ' ')
+                f.write((typ_indent - 1) * ' ')
                 for j, item in enumerate(row):
                     if j != col['reference designator'] and type(item) is str:
                         item = item.replace('#', '\\#').replace('@', '\\@')
@@ -353,31 +410,37 @@ class App:
                 f.write('\n')
             f.write(')\n')
 
+        print(f"saved to '{output_path}'")
         print('done')
+        return output_path
 
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('BOM', help='BOM file to be highlighted')
 parser.add_argument(
-    '--loc',
+    '-x', '--pick',
     nargs='?',
-    help='text file with component locations')
+    help='pick and place file')
 parser.add_argument(
     '-o', '--output',
     nargs='?',
     help='output file to write to')
 parser.add_argument(
-    '--header',
-    nargs='?', default=1, type=int,
-    help='BOM row that contains the header (default: 1)')
+    '-p', '--pre-header',
+    nargs='?', default=0, type=int,
+    help='rows before the header (default: 0)')
 parser.add_argument(
     '-y', '--yes',
     action='store_true',
     help='skip unrequired user prompts')
+parser.add_argument(
+    '-v', '--verbose',
+    action='store_true',
+    help='show all status messages')
 args = parser.parse_args()
 
-app = App(args.BOM, args.loc, args.output, args.header, args.yes)
+app = App(args.BOM, args.pick, args.output, args.pre_header, args.yes, args.verbose)
 app.settings_init(_settings_path)
 app.database_init()
-app.run()
+app.generate_hbom()
