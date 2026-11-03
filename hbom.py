@@ -18,10 +18,16 @@ _settings_path = os.path.expanduser('~/.hbom/settings.json')
 _default_settings = {
     'dbpath': os.path.expanduser('~/.hbom/hbom_database.db'),
     'headerpatterns': {
-        'description': 'desc\\.?(ription)?',
+        'description': '(component )?desc\\.?(ription)?',
         'product identifier': '(mfg\\.?|manufacturer) p(art)?[ /.]?n(um)?\\.?(ber)?',
         'reference designator': 'ref\\.?(erence)?( designator)?',
         'quantity': 'qty\\.?|quantity'
+    },
+    'highlightcolors': {
+        'pthtop': 'rgb("#ffff00")',
+        'pthbot': 'aqua',
+        'smdtop': 'lime',
+        'smdbot': 'rgb("#dd97e8")'
     },
     'pkgpatterns': {
         'pth': ['PTH'],
@@ -32,7 +38,10 @@ _default_settings = {
 typ_indent = 2  # typst document indent
 
 
-def typ_template(path, datestr, columns, pre_header, refd_col):
+def typ_template(path, datestr, columns, pre_header, refd_col, highlight_colors):
+    highlight_styling = ''
+    for tag, color in highlight_colors.items():
+        highlight_styling += f'#show <{tag}>: it => highlight(fill: {color}, it)\n\n'
     return '''// {}
 // Highlighted BOM generated using hbom
 // Created on {}
@@ -68,19 +77,13 @@ def typ_template(path, datestr, columns, pre_header, refd_col):
 
 /* Reference designator highlighting */
 
-#show <pthtop>: it => highlight(fill: rgb("#ffff00"), it)
-
-#show <pthbot>: it => highlight(fill: aqua, it)
-
-#show <smdtop>: it => highlight(fill: lime, it)
-
-#show <smdbot>: it => highlight(fill: rgb("#dd97e8"), it)
-
-/* Content */
+{}/* Content */
 
 #table(
   table.header(
-'''.format(path, datestr, path, columns, pre_header, refd_col, pre_header, pre_header)
+'''.format(
+        path, datestr, path, columns, pre_header, refd_col, pre_header, pre_header,
+        highlight_styling)
 
 
 # App object
@@ -389,7 +392,8 @@ class App:
         with open(output_path, 'w') as f:
             # Template
             f.write(typ_template(output_path, datetime.now().strftime("%d %b %Y"), len(header),
-                    self._pre_header, col['reference designator']))
+                    self._pre_header, col['reference designator'],
+                    self._settings['highlightcolors']))
 
             # Fill table
             for row in pretable:
