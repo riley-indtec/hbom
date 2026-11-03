@@ -101,6 +101,8 @@ class App:
     def settings_init(self, settings_path):
         # Create a new settings file if it doesn't exist
         if not os.path.isfile(settings_path):
+            if self._verbose:
+                print(f"creating new settings file '{settings_path}'\n")
             dir = os.path.dirname(settings_path)
             if dir:
                 os.makedirs(dir, exist_ok=True)
@@ -109,6 +111,8 @@ class App:
 
         # Otherwise, retrieve existing settings
         else:
+            if self._verbose:
+                print(f"loading settings from '{settings_path}'\n")
             with open(settings_path, 'r') as f:
                 local_settings = json.load(f)
 
@@ -127,6 +131,8 @@ class App:
 
     def database_init(self):
         # Connect to database
+        if self._verbose:
+            print(f"connecting to database '{self._settings['dbpath']}'")
         con = sqlite3.connect(self._settings['dbpath'])
         cur = con.cursor()
 
@@ -138,10 +144,14 @@ class App:
                     desc TEXT,
                     pkgtype TEXT
                 )''')
+            if self._verbose:
+                print('created new table in database')
         except sqlite3.OperationalError:
             pass
 
         con.close()
+        if self._verbose:
+            print()
 
     def generate_hbom(self):
         # Check if files exist
