@@ -1,6 +1,8 @@
 # hbom.py
 # Author: Riley Mann
 #
+# try `hbom -h`
+#
 # Created on 1 Nov 2026
 
 import argparse
@@ -416,7 +418,8 @@ class App:
 
 
 # Parse CLI arguments
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(
+    description='A PCA BOM table highlighter tool')
 parser.add_argument('BOM', help='BOM file to be highlighted')
 parser.add_argument(
     '-x', '--pick',

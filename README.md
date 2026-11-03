@@ -1,5 +1,5 @@
 # hbom
 
-BOM table highlighter tool
+A PCA BOM table highlighter tool
 
-version 0.1
+version 0.2

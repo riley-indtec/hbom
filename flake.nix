@@ -1,5 +1,5 @@
 {
-  description = "BOM Highlighter Flake";
+  description = "hbom flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -27,7 +27,7 @@
         ];
 
         shellHook = ''
-          echo "Using BOM Highlighter devShell!"
+          echo "Using hbom devShell!"
           python3 --version
           echo ""
         '';
