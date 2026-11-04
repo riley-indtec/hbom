@@ -343,43 +343,45 @@ class App:
                 for refd in [item.strip() for item in refds.split(',')]:
                     # Determine board face
                     face = None
-                    if self._verbose:
-                        print(f"determining board face for '{refd}'...")
 
-                    # Try the pick-and-place file
-                    if self._pick_path:
-                        with open(self._pick_path, 'r') as f:
-                            for line in f:
-                                if re.search('\\b' + refd + '\\b', line):
-                                    if re.search('\\btop', line, re.IGNORECASE):
-                                        face = 'top'
+                    if pkgtype:
+                        if self._verbose:
+                            print(f"determining board face for '{refd}'...")
+
+                        # Try the pick-and-place file
+                        if self._pick_path:
+                            with open(self._pick_path, 'r') as f:
+                                for line in f:
+                                    if re.search('\\b' + refd + '\\b', line):
+                                        if re.search('\\btop', line, re.IGNORECASE):
+                                            face = 'top'
+                                            break
+                                        if re.search('\\bbot', line, re.IGNORECASE):
+                                            face = 'bot'
+                                            break
+                            if face and self._verbose:
+                                print(f"found face for '{refd}' in '{self._pick_path}' -> {face}")
+
+                        # lastly, prompt the user
+                        if face is None:
+                            print(f"unable to determine face for '{refd}'.")
+                            if not self._skip_prompts:
+                                options = ['top', 'bot']
+                                while True:
+                                    ans = input(f"Enter face for '{refd}' {options + ['none']} ('q' to quit): ")
+                                    if ans.lower() == 'q':
+                                        print('exit')
+                                        return None
+                                    if ans.lower() == 'none':
                                         break
-                                    if re.search('\\bbot', line, re.IGNORECASE):
-                                        face = 'bot'
+                                    if ans.lower() in options:
+                                        face = ans.lower()
+                                        print(f"selected '{face}'")
                                         break
-                        if face and self._verbose:
-                            print(f"found face for '{refd}' in '{self._pick_path}' -> {face}")
+                                    print(f"invalid face '{ans}'")
 
-                    # lastly, prompt the user
-                    if face is None:
-                        print(f"unable to determine face for '{refd}'.")
-                        if not self._skip_prompts:
-                            options = ['top', 'bot']
-                            while True:
-                                ans = input(f"Enter face for '{refd}' {options + ['none']} ('q' to quit): ")
-                                if ans.lower() == 'q':
-                                    print('exit')
-                                    return None
-                                if ans.lower() == 'none':
-                                    break
-                                if ans.lower() in options:
-                                    face = ans.lower()
-                                    print(f"selected '{face}'")
-                                    break
-                                print(f"invalid face '{ans}'")
-
-                    if self._verbose:
-                        print(f"finished determining board face type for '{refd}' -> {face}")
+                        if self._verbose:
+                            print(f"finished determining board face type for '{refd}' -> {face}")
 
                     if pkgtype and face:
                         tagged_list.append(f'#box[{refd}]<{pkgtype}{face}>')
