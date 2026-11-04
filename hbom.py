@@ -352,7 +352,7 @@ class App:
                         if self._pick_path:
                             with open(self._pick_path, 'r') as f:
                                 for line in f:
-                                    if re.search('\\b' + refd + '\\b', line):
+                                    if re.search('\\b' + re.escape(refd) + '\\b', line):
                                         if re.search('\\btop', line, re.IGNORECASE):
                                             face = 'top'
                                             break
