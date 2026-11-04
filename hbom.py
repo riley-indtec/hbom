@@ -38,6 +38,15 @@ _default_settings = {
 typ_indent = 2  # typst document indent
 
 
+# Handle special characters for use in typst content
+def typstify(msg):
+    codes = ['*', '_', '`', '<', '>', '@', '=', '-', '+', '/', '$', "'", '"', '~', '#']
+    msg = msg.replace('\\', '\\\\')
+    for code in codes:
+        msg = msg.replace(code, '\\' + code)
+    return msg
+
+
 def typ_template(path, datestr, columns, pre_header, refd_col, highlight_colors):
     highlight_styling = ''
     for tag, color in highlight_colors.items():
@@ -82,8 +91,8 @@ def typ_template(path, datestr, columns, pre_header, refd_col, highlight_colors)
 #table(
   table.header(
 '''.format(
-        path, datestr, path, columns, pre_header, refd_col, pre_header, pre_header,
-        highlight_styling)
+        typstify(path), typstify(datestr), typstify(path), columns, pre_header, refd_col,
+        pre_header, pre_header, highlight_styling)
 
 
 # App object
@@ -409,19 +418,17 @@ class App:
             for row in pretable:
                 f.write((2 * typ_indent - 1) * ' ')
                 for item in row:
-                    item = item.replace('#', '\\#').replace('@', '\\@')
-                    f.write(f' [{item}],')
+                    f.write(f' [{typstify(item)}],')
                 f.write('\n')
             f.write((2 * typ_indent - 1) * ' ')
             for item in header:
-                item = item.replace('#', '\\#').replace('@', '\\@')
-                f.write(f' [{item}],')
+                f.write(f' [{typstify(item)}],')
             f.write('\n' + typ_indent * ' ' + '),\n')
             for row in table:
                 f.write((typ_indent - 1) * ' ')
                 for j, item in enumerate(row):
                     if j != col['reference designator'] and type(item) is str:
-                        item = item.replace('#', '\\#').replace('@', '\\@')
+                        item = typstify(item)
                     f.write(f' [{item}],')
                 f.write('\n')
             f.write(')\n')
