@@ -276,7 +276,7 @@ class App:
                 if desc:
                     for key, patterns in self._settings['pkgpatterns'].items():
                         for pattern in patterns:
-                            if re.search('\\b' + re.escape(pattern) + '\\b', desc, re.IGNORECASE):
+                            if re.search('\\b' + pattern + '\\b', desc, re.IGNORECASE):
                                 pkgtype = key
                                 if self._verbose:
                                     print(f"'{desc}' -> {pkgtype}")
