@@ -27,7 +27,7 @@ _default_settings = {
         'pthtop': 'rgb("#ffff00")',
         'pthbot': 'aqua',
         'smdtop': 'lime',
-        'smdbot': 'rgb("#dd97e8")'
+        'smdbot': 'rgb("#c958da")',
     },
     'pkgpatterns': {
         'pth': ['PTH'],
