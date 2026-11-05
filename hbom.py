@@ -91,7 +91,7 @@ def typ_template(path, datestr, columns, pre_header, refd_col, highlight_colors)
 #table(
   table.header(
 '''.format(
-        typstify(path), typstify(datestr), typstify(path), columns, pre_header, refd_col,
+        path, typstify(datestr), typstify(path), columns, pre_header, refd_col,
         pre_header, pre_header, highlight_styling)
 
 
