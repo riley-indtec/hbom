@@ -222,7 +222,7 @@ class App:
                 for j, name in enumerate(header):
                     print(f'{j}: [{name}]')
                 while True:
-                    ans = input(f"select the {key} column [0-{len(header) - 1}] ('q' to quit): ")
+                    ans = input(f"Select the {key} column [0-{len(header) - 1}] ('q' to quit): ")
                     if ans.lower() == 'q':
                         print('exit')
                         return None
@@ -249,7 +249,7 @@ class App:
             print('parsing table...')
         for i, row in enumerate(table):
             if self._verbose:
-                print(f"\nrow {i}:", ', '.join([f'[{value}]' for value in row]))
+                print(f"\nROW {i}:", ', '.join([f'[{value}]' for value in row]))
 
             desc = row[col['description']]
             pid = row[col['product identifier']]
@@ -302,7 +302,7 @@ class App:
                     print()
                     if not self._skip_prompts:
                         while True:
-                            ans = input(f"pick a package type for row {i} {[key for key in self._settings['pkgpatterns']] + ['none']} ('q' to quit): ")
+                            ans = input(f"Give a package type for row {i} '{desc}' {[key for key in self._settings['pkgpatterns']] + ['none']} ('q' to quit): ")
                             if ans.lower() == 'q':
                                 print('exit')
                                 return None
@@ -317,7 +317,7 @@ class App:
                         # Save decision to database
                         if pkgtype is not None and pid:
                             while True:
-                                ans = input(f"save '{pid}' as {pkgtype} to database? [y/n] ('q' to quit): ")
+                                ans = input(f"Save '{pid}' as {pkgtype} to database? [y/n] ('q' to quit): ")
                                 if ans.lower() == 'q':
                                     print('exit')
                                     return None
@@ -338,6 +338,8 @@ class App:
 
                 # Build tagged reference designators list
                 tagged_list = []
+                row_face = None
+                ask_to_repeat = False
                 if self._verbose:
                     print(f'tagging reference designators for row {i}...')
                 for refd in [item.strip() for item in refds.split(',')]:
@@ -345,40 +347,62 @@ class App:
                     face = None
 
                     if pkgtype:
-                        if self._verbose:
-                            print(f"determining board face for '{refd}'...")
+                        # If the row is all on the same face repeat the face assignment
+                        if row_face:
+                            face = row_face
+                            if self._verbose(f"repeating '{row_face}' for '{refd}'")
 
-                        # Try the pick-and-place file
-                        if self._pick_path:
-                            with open(self._pick_path, 'r') as f:
-                                for line in f:
-                                    if re.search('\\b' + re.escape(refd) + '\\b', line):
-                                        if re.search('\\btop', line, re.IGNORECASE):
-                                            face = 'top'
-                                            break
-                                        if re.search('\\bbot', line, re.IGNORECASE):
-                                            face = 'bot'
-                                            break
-                            if face and self._verbose:
-                                print(f"found face for '{refd}' in '{self._pick_path}' -> {face}")
+                        # Otherwise, determine the board face
+                        else:
+                            if self._verbose:
+                                print(f"determining board face for '{refd}'...")
 
-                        # lastly, prompt the user
-                        if face is None:
-                            print(f"unable to determine face for '{refd}'.")
-                            if not self._skip_prompts:
-                                options = ['top', 'bot']
-                                while True:
-                                    ans = input(f"Enter face for '{refd}' {options + ['none']} ('q' to quit): ")
-                                    if ans.lower() == 'q':
-                                        print('exit')
-                                        return None
-                                    if ans.lower() == 'none':
-                                        break
-                                    if ans.lower() in options:
-                                        face = ans.lower()
-                                        print(f"selected '{face}'")
-                                        break
-                                    print(f"invalid face '{ans}'")
+                            # Try the pick-and-place file
+                            if self._pick_path:
+                                with open(self._pick_path, 'r') as f:
+                                    for line in f:
+                                        if re.search('\\b' + re.escape(refd) + '\\b', line):
+                                            if re.search('\\btop', line, re.IGNORECASE):
+                                                face = 'top'
+                                                break
+                                            if re.search('\\bbot', line, re.IGNORECASE):
+                                                face = 'bot'
+                                                break
+                                if face and self._verbose:
+                                    print(f"found face for '{refd}' in '{self._pick_path}' -> {face}")
+
+                            # lastly, prompt the user
+                            if face is None:
+                                print(f"unable to determine face for '{refd}'.")
+                                if not self._skip_prompts:
+                                    options = ['top', 'bot']
+                                    while True:
+                                        ans = input(f"Enter face for '{refd}' {options + ['none']} ('q' to quit): ")
+                                        if ans.lower() == 'q':
+                                            print('exit')
+                                            return None
+                                        if ans.lower() == 'none':
+                                            break
+                                        if ans.lower() in options:
+                                            face = ans.lower()
+                                            print(f"selected '{face}'")
+                                            break
+                                        print(f"invalid face '{ans}'")
+
+                                    # Prompt user if the row is all the same
+                                    if ask_to_repeat and face:
+                                        while True:
+                                            ans = input(f"Are [{refds}] all on the same side? [y/n] ('q' to quit): ")
+                                            if ans.lower() == 'q':
+                                                print('exit')
+                                                return None
+                                            if ans.lower() == 'y':
+                                                row_face = face
+                                                break
+                                            if ans.lower() == 'n':
+                                                break
+                                            print(f"invalid answer '{ans}'")
+                                        ask_to_repeat = False
 
                         if self._verbose:
                             print(f"finished determining board face type for '{refd}' -> {face}")
