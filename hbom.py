@@ -337,12 +337,13 @@ class App:
                     print(f'finished determining package type for row {i} -> {pkgtype}')
 
                 # Build tagged reference designators list
+                refds_list = [item.strip() for item in refds.split(',')]
                 tagged_list = []
                 row_face = None
                 ask_to_repeat = True
                 if self._verbose:
                     print(f'tagging reference designators for row {i}...')
-                for refd in [item.strip() for item in refds.split(',')]:
+                for refd in refds_list:
                     # Determine board face
                     face = None
 
@@ -391,7 +392,7 @@ class App:
                                         print(f"invalid face '{ans}'")
 
                                     # Prompt user if the row is all the same
-                                    if ask_to_repeat and face:
+                                    if ask_to_repeat and face and refd != refds_list[-1]:
                                         while True:
                                             ans = input(f"Are [{refds}] all on the same side? [y/n] ('q' to quit): ")
                                             if ans.lower() == 'q':
