@@ -339,7 +339,7 @@ class App:
                 # Build tagged reference designators list
                 tagged_list = []
                 row_face = None
-                ask_to_repeat = False
+                ask_to_repeat = True
                 if self._verbose:
                     print(f'tagging reference designators for row {i}...')
                 for refd in [item.strip() for item in refds.split(',')]:
@@ -350,7 +350,8 @@ class App:
                         # If the row is all on the same face repeat the face assignment
                         if row_face:
                             face = row_face
-                            if self._verbose(f"repeating '{row_face}' for '{refd}'")
+                            if self._verbose:
+                                print(f"repeating '{row_face}' for '{refd}'")
 
                         # Otherwise, determine the board face
                         else:
