@@ -362,8 +362,17 @@ class App:
                             # Try the pick-and-place file
                             if self._pick_path:
                                 with open(self._pick_path, 'r') as f:
+                                    look_for_mirror = False
                                     for line in f:
+                                        if re.search('\\bmirror\\b', line):
+                                            look_for_mirror = True
                                         if re.search('\\b' + re.escape(refd) + '\\b', line):
+                                            if look_for_mirror:
+                                                if re.search('\\bm\\b', line):
+                                                    face = 'bot'
+                                                else:
+                                                    face = 'top'
+                                                break
                                             if re.search('\\btop', line, re.IGNORECASE):
                                                 face = 'top'
                                                 break
