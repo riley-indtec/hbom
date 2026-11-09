@@ -22,7 +22,9 @@
     in {
       default = pkgs.mkShell {
         buildInputs = with pkgs; [
-          python3
+          (python3.withPackages (python-pkgs: with python-pkgs; [
+            colorama
+          ]))
           typst
         ];
 
@@ -39,6 +41,9 @@
       pkgs = pkgsFor.${system};
     in rec {
       hbom = pkgs.writers.writePython3Bin "hbom" {
+        libraries = with pkgs.python3Packages; [
+          colorama
+        ];
         flakeIgnore = [ "E501" ];
       } (builtins.readFile ./hbom.py);
 

@@ -7,11 +7,13 @@
 
 import argparse
 from datetime import datetime
+from colorama import Fore
 import csv
 import json
 import os
 import re
 import sqlite3
+import sys
 
 _settings_path = os.path.expanduser('~/.hbom/settings.json')
 
@@ -162,19 +164,58 @@ class App:
         if self._verbose:
             print()
 
+    def close(self):
+        print('exit')
+        sys.exit()
+
+    def _bool_prompt(self, prompt):
+        while True:
+            ans = input(f"{prompt} {Fore.GREEN}[y/n]{Fore.RESET} ('q' to quit): ")
+            if ans.lower() in ['q', 'quit']:
+                self.close()
+            if ans.lower() in ['y', 'yes']:
+                return True
+            if ans.lower() in ['n', 'no']:
+                return False
+            print(f"{Fore.RED}invalid answer{Fore.RESET} '{ans}'")
+
+    def _num_prompt(self, prompt, n):
+        while True:
+            ans = input(f"{prompt} {Fore.GREEN}[0-{n}]{Fore.RESET} ('q' to quit): ")
+            if ans.lower() in ['q', 'quit']:
+                self.close()
+            try:
+                ans_int = int(ans)
+                if ans_int in range(n):
+                    return ans_int
+            except ValueError:
+                pass
+            print(f"{Fore.RED}invalid option{Fore.RESET} '{ans}'")
+
+    def _options_prompt(self, prompt, options):
+        options = [option.lower() for option in options]
+        while True:
+            ans = input(f"{prompt} {Fore.GREEN}{options + ['none']}{Fore.RESET} ('q' to quit): ")
+            if ans.lower() in ['q', 'quit']:
+                self.close()
+            if ans.lower() == 'none':
+                return None
+            if ans.lower() in options:
+                return ans.lower()
+            print(f"{Fore.RED}invalid option{Fore.RESET} '{ans}'")
+
     def generate_hbom(self):
         # Check if files exist
         files_exist = True
         if not os.path.isfile(self._bom_path):
-            print(f"BOM file '{self._bom_path}' not found")
+            print(f"{Fore.RED}BOM file '{self._bom_path}' not found{Fore.RESET}")
             files_exist = False
         if self._pick_path:
             if not os.path.isfile(self._pick_path):
-                print(f"pick and place file '{self._pick_path}' not found")
+                print(f"{Fore.RED}pick and place file '{self._pick_path}' not found{Fore.RESET}")
                 files_exist = False
         if not files_exist:
-            print('exit')
-            return None
+            self.close()
 
         # Read BOM file
         pretable = []
@@ -220,21 +261,9 @@ class App:
             if value is None:
                 print(f"couldn't find the {key} column")
                 for j, name in enumerate(header):
-                    print(f'{j}: [{name}]')
-                while True:
-                    ans = input(f"Select the {key} column [0-{len(header) - 1}] ('q' to quit): ")
-                    if ans.lower() == 'q':
-                        print('exit')
-                        return None
-                    try:
-                        ans_int = int(ans)
-                        if ans_int in range(len(header)):
-                            col[key] = ans_int
-                            print(f"selected [{header[ans_int]}]")
-                            break
-                    except ValueError:
-                        pass
-                    print(f"invalid column '{ans}'")
+                    print(f'{Fore.GREEN}{j}{Fore.RESET}: [{Fore.YELLOW}{name}{Fore.RESET}]')
+                col[key] = self._num_prompt(f'Select the {key} column', len(header))
+                print(f'selected [{Fore.YELLOW}{header[col[key]]}{Fore.RESET}]')
 
         # Print selected columns
         if self._verbose:
@@ -301,37 +330,20 @@ class App:
                         print(f'[{key}]: {value}')
                     print()
                     if not self._skip_prompts:
-                        while True:
-                            ans = input(f"Give a package type for row {i} '{desc}' {[key for key in self._settings['pkgpatterns']] + ['none']} ('q' to quit): ")
-                            if ans.lower() == 'q':
-                                print('exit')
-                                return None
-                            if ans.lower() == 'none':
-                                break
-                            if ans.lower() in self._settings['pkgpatterns']:
-                                pkgtype = ans.lower()
-                                print(f'selected {pkgtype}')
-                                break
-                            print(f"invalid package type '{ans}'")
+                        pkgtype = self._options_prompt(
+                            f"Give a package type for row {i} '{desc}'",
+                            [key for key in self._settings['pkgpatterns']])
+                        print(f'selected {Fore.YELLOW}{pkgtype}{Fore.RESET}')
 
                         # Save decision to database
                         if pkgtype is not None and pid:
-                            while True:
-                                ans = input(f"Save '{pid}' as {pkgtype} to database? [y/n] ('q' to quit): ")
-                                if ans.lower() == 'q':
-                                    print('exit')
-                                    return None
-                                if ans.lower() == 'y':
-                                    cur.execute('''
-                                        INSERT INTO pkgmem
-                                        VALUES ('{}', '{}', '{}')
-                                        '''.format(pid, desc, pkgtype))
-                                    con.commit()
-                                    print(f"saved '{pid}' to database")
-                                    break
-                                if ans.lower() == 'n':
-                                    break
-                                print(f"invalid answer '{ans}'")
+                            if self._bool_prompt(f"Save '{Fore.YELLOW}{pid}{Fore.RESET}' as {Fore.YELLOW}{pkgtype}{Fore.RESET} to database?"):
+                                cur.execute('''
+                                    INSERT INTO pkgmem
+                                    VALUES ('{}', '{}', '{}')
+                                    '''.format(pid, desc, pkgtype))
+                                con.commit()
+                                print(f"saved '{Fore.YELLOW}{pid}{Fore.RESET}' to database")
 
                 if self._verbose:
                     print(f'finished determining package type for row {i} -> {pkgtype}')
@@ -387,32 +399,14 @@ class App:
                                 print(f"unable to determine face for '{refd}'.")
                                 if not self._skip_prompts:
                                     options = ['top', 'bot']
-                                    while True:
-                                        ans = input(f"Enter face for '{refd}' {options + ['none']} ('q' to quit): ")
-                                        if ans.lower() == 'q':
-                                            print('exit')
-                                            return None
-                                        if ans.lower() == 'none':
-                                            break
-                                        if ans.lower() in options:
-                                            face = ans.lower()
-                                            print(f"selected '{face}'")
-                                            break
-                                        print(f"invalid face '{ans}'")
+                                    face = self._options_prompt(f"Enter face for '{refd}'", options)
+                                    print(f"selected '{Fore.YELLOW}{face}{Fore.RESET}'")
 
                                     # Prompt user if the row is all the same
                                     if ask_to_repeat and face and refd != refds_list[-1]:
-                                        while True:
-                                            ans = input(f"Are [{refds}] all on the same side? [y/n] ('q' to quit): ")
-                                            if ans.lower() == 'q':
-                                                print('exit')
-                                                return None
-                                            if ans.lower() == 'y':
-                                                row_face = face
-                                                break
-                                            if ans.lower() == 'n':
-                                                break
-                                            print(f"invalid answer '{ans}'")
+                                        if self._bool_prompt(f'Are [{refds}] all on the same side?'):
+                                            row_face = face
+                                            print(f"repeating '{Fore.YELLOW}{row_face}{Fore.RESET}' for all parts in the row")
                                         ask_to_repeat = False
 
                         if self._verbose:
