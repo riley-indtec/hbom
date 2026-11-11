@@ -324,7 +324,7 @@ class App:
                         for line in f:
                             if re.search('\\bmirror\\b', line):
                                 look_for_mirror = True
-                            if re.search('\\b' + re.escape(refd) + '\\b', line):
+                            if re.search('(\\A|\\s)' + re.escape(refd) + '\\s', line):
                                 if look_for_mirror:
                                     if re.search('\\bm\\b', line):
                                         face = 'bot'
@@ -460,7 +460,7 @@ class App:
                 pkgtype = self._determine_pkgtype(header, row, col, con, cur)
 
                 # Build tagged reference designators list
-                refds_list = [item.strip() for item in refds.split(',')]
+                refds_list = [item.strip() for item in refds.lstrip("'").split(',')]
                 tagged_list = self._tag(refds_list, pkgtype)
 
                 # replace the reference designators string
