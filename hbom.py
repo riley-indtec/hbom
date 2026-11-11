@@ -99,21 +99,19 @@ def typ_template(path, datestr, columns, pre_header, refd_col, highlight_colors)
 
 # App object
 class App:
-    def __init__(self, bom_path, pick_path, output_path, pre_header, skip_prompts, verbose):
+    def __init__(self, bom_path, pick_path, output_path, pre_header, skip_prompts):
         self._bom_path = bom_path
         self._pick_path = pick_path
         self._output_path = output_path
         self._pre_header = pre_header
         self._skip_prompts = skip_prompts
-        self._verbose = verbose
 
         self._settings = _default_settings.copy()
 
     def settings_init(self, settings_path):
         # Create a new settings file if it doesn't exist
         if not os.path.isfile(settings_path):
-            if self._verbose:
-                print(f"creating new settings file '{settings_path}'\n")
+            print(f"creating new settings file '{Fore.CYAN}{settings_path}{Fore.RESET}'")
             dir = os.path.dirname(settings_path)
             if dir:
                 os.makedirs(dir, exist_ok=True)
@@ -122,8 +120,7 @@ class App:
 
         # Otherwise, retrieve existing settings
         else:
-            if self._verbose:
-                print(f"loading settings from '{settings_path}'\n")
+            print(f"loading settings from '{Fore.CYAN}{settings_path}{Fore.RESET}'")
             with open(settings_path, 'r') as f:
                 local_settings = json.load(f)
 
@@ -142,8 +139,7 @@ class App:
 
     def database_init(self):
         # Connect to database
-        if self._verbose:
-            print(f"connecting to database '{self._settings['dbpath']}'")
+        print(f"connecting to database '{Fore.CYAN}{self._settings['dbpath']}{Fore.RESET}'")
         con = sqlite3.connect(self._settings['dbpath'])
         cur = con.cursor()
 
@@ -155,14 +151,11 @@ class App:
                     desc TEXT,
                     pkgtype TEXT
                 )''')
-            if self._verbose:
-                print('created new table in database')
+            print(f"created new table '{Fore.YELLOW}pkgmem{Fore.RESET}' in database")
         except sqlite3.OperationalError:
             pass
 
         con.close()
-        if self._verbose:
-            print()
 
     def close(self):
         print('exit')
@@ -204,25 +197,11 @@ class App:
                 return ans.lower()
             print(f"{Fore.RED}invalid option{Fore.RESET} '{ans}'")
 
-    def generate_hbom(self):
-        # Check if files exist
-        files_exist = True
-        if not os.path.isfile(self._bom_path):
-            print(f"{Fore.RED}BOM file '{self._bom_path}' not found{Fore.RESET}")
-            files_exist = False
-        if self._pick_path:
-            if not os.path.isfile(self._pick_path):
-                print(f"{Fore.RED}pick and place file '{self._pick_path}' not found{Fore.RESET}")
-                files_exist = False
-        if not files_exist:
-            self.close()
-
-        # Read BOM file
+    def _read_bom(self):
         pretable = []
         header = None
         table = []
-        if self._verbose:
-            print(f"reading '{self._bom_path}...'")
+        print(f"reading '{Fore.CYAN}{self._bom_path}{Fore.RESET}'...")
         with open(self._bom_path, 'r') as bom_file:
             bom_reader = csv.reader(bom_file)
             for i, row in enumerate(bom_reader):
@@ -237,13 +216,12 @@ class App:
                 # Rest of the table
                 else:
                     table.append(row)
-        if self._verbose:
-            print(f"finished reading '{self._bom_path}'")
 
-        # Print header
-        if self._verbose:
-            print('header:', ', '.join([f'[{name}]' for name in header]))
-            print('selecting columns...')
+        print(f"finished reading '{Fore.CYAN}{self._bom_path}{Fore.RESET}'")
+        return pretable, header, table
+
+    def _index_cols(self, header):
+        print('selecting columns...')
 
         # Automatically locate columns using header names
         col = {key: None for key in self._settings['headerpatterns']}
@@ -253,8 +231,7 @@ class App:
                 if re.fullmatch(patterns[key], name, re.IGNORECASE):
                     if col[key] is None:
                         col[key] = j
-                        if self._verbose:
-                            print(f"found the {key} column: [{name}]")
+                        print(f"found the {key} column: [{Fore.YELLOW}{name}{Fore.RESET}]")
 
         # Manually select any required columns not already found
         for key, value in col.items():
@@ -265,177 +242,145 @@ class App:
                 col[key] = self._num_prompt(f'Select the {key} column', len(header))
                 print(f'selected [{Fore.YELLOW}{header[col[key]]}{Fore.RESET}]')
 
-        # Print selected columns
-        if self._verbose:
-            print('finished selecting columns')
+        print('finished selecting columns')
+        return col
 
-        # Connect to database
-        con = sqlite3.connect(self._settings['dbpath'])
-        cur = con.cursor()
+    def _determine_pkgtype(self, header, row, col, con, cur):
+        print('determining package type...')
+        pid = row[col['product identifier']]
+        desc = row[col['description']]
 
-        # Parse table
-        if self._verbose:
-            print('parsing table...')
-        for i, row in enumerate(table):
-            if self._verbose:
-                print(f"\nROW {i}:", ', '.join([f'[{value}]' for value in row]))
+        # First, try searching the description
+        if desc:
+            for pkgtype, patterns in self._settings['pkgpatterns'].items():
+                for pattern in patterns:
+                    if re.search('\\b' + pattern + '\\b', desc, re.IGNORECASE):
+                        print("description '{}' matches {} package type".format(
+                            Fore.YELLOW + desc + Fore.RESET,
+                            Fore.YELLOW + pkgtype + Fore.RESET))
+                        return pkgtype
 
-            desc = row[col['description']]
-            pid = row[col['product identifier']]
-            refds = row[col['reference designator']]
-            qty = row[col['quantity']]
+        # Next, try the database
+        if pid:
+            result = cur.execute('''
+                SELECT pkgtype
+                FROM pkgmem
+                WHERE id = '{}'
+                '''.format(pid)).fetchone()
+            if result:
+                pkgtype = result[0]
+                print("found '{}' in database as {} package type".format(
+                    Fore.YELLOW + pid + Fore.RESET,
+                    Fore.YELLOW + pkgtype + Fore.RESET))
+                return pkgtype
 
-            # Convert quantities to integers
-            try:
-                row[col['quantity']] = int(qty)
-            except ValueError:
-                pass
+        # Lastly, prompt the user
+        pkgtype = None
+        print('unable to determine package type for the following:')
+        for key, value in zip(header, row):
+            print(f'[{key}]: {Fore.YELLOW}{value}{Fore.RESET}')
+        if not self._skip_prompts:
+            pkgtype = self._options_prompt(
+                "Give a package type for PID: '{}', DESC: '{}'".format(
+                    Fore.YELLOW + pid + Fore.RESET,
+                    Fore.YELLOW + desc + Fore.RESET),
+                [key for key in self._settings['pkgpatterns']])
+            print(f'selected {Fore.YELLOW}{pkgtype}{Fore.RESET}')
 
-            # Highlight reference designators
-            if refds:
-                if self._verbose:
-                    print('row contains loaded parts')
+            # Save decision to database
+            if pkgtype is not None and pid:
+                prompt = "Save '{}' as {} to database?".format(
+                    Fore.YELLOW + pid + Fore.RESET,
+                    Fore.YELLOW + pkgtype + Fore.RESET)
+                if self._bool_prompt(prompt):
+                    cur.execute('''
+                        INSERT INTO pkgmem
+                        VALUES ('{}', '{}', '{}')
+                        '''.format(pid, desc, pkgtype))
+                    con.commit()
+                    print("saved '{}' | '{}' | '{}' to database".format(
+                        Fore.YELLOW + pid + Fore.RESET,
+                        Fore.YELLOW + desc + Fore.RESET,
+                        Fore.YELLOW + pkgtype + Fore.RESET))
+        return pkgtype
 
-                # Find package type: pth or smd
-                pkgtype = None
-                if self._verbose:
-                    print(f'determining package type for row {i}...')
+    def _tag(self, refds_list, pkgtype):
+        print('tagging reference designators...')
+        tagged = []
+        repeat = None
 
-                # Try searching the description
-                if desc:
-                    for key, patterns in self._settings['pkgpatterns'].items():
-                        for pattern in patterns:
-                            if re.search('\\b' + pattern + '\\b', desc, re.IGNORECASE):
-                                pkgtype = key
-                                if self._verbose:
-                                    print(f"'{desc}' -> {pkgtype}")
+        for i, refd in enumerate(refds_list):
+            face = None
+            if pkgtype:
+                print(f"determining board face for '{Fore.YELLOW}{refd}{Fore.RESET}'...")
 
-                # Try the database
-                if pkgtype is None and pid:
-                    result = cur.execute('''
-                        SELECT pkgtype
-                        FROM pkgmem
-                        WHERE id = '{}'
-                        '''.format(pid)).fetchone()
-                    if result:
-                        pkgtype = result[0]
-                        if self._verbose:
-                            print(f"found '{pid}' in database -> {pkgtype}")
+                if repeat:
+                    face = repeat
+
+                # First, try the pick-and-place file
+                if face is None and self._pick_path:
+                    with open(self._pick_path, 'r') as f:
+                        look_for_mirror = False
+                        for line in f:
+                            if re.search('\\bmirror\\b', line):
+                                look_for_mirror = True
+                            if re.search('\\b' + re.escape(refd) + '\\b', line):
+                                if look_for_mirror:
+                                    if re.search('\\bm\\b', line):
+                                        face = 'bot'
+                                    else:
+                                        face = 'top'
+                                    break
+                                if re.search('\\btop', line, re.IGNORECASE):
+                                    face = 'top'
+                                    break
+                                if re.search('\\bbot', line, re.IGNORECASE):
+                                    face = 'bot'
+                                    break
+                    if face:
+                        print("found '{}' in '{}' on {} face".format(
+                            Fore.YELLOW + refd + Fore.RESET,
+                            Fore.CYAN + self._pick_path + Fore.RESET,
+                            Fore.YELLOW + face + Fore.RESET))
 
                 # Lastly, prompt the user
-                if pkgtype is None:
-                    print('unable to determine package type for the following:')
-                    print()
-                    for key, value in zip(header, row):
-                        print(f'[{key}]: {value}')
-                    print()
+                if face is None:
+                    print(f"unable to determine board face for '{Fore.YELLOW}{refd}{Fore.RESET}'.")
                     if not self._skip_prompts:
-                        pkgtype = self._options_prompt(
-                            f"Give a package type for row {i} '{desc}'",
-                            [key for key in self._settings['pkgpatterns']])
-                        print(f'selected {Fore.YELLOW}{pkgtype}{Fore.RESET}')
+                        options = ['top', 'bot']
+                        face = self._options_prompt("Enter face for '{}'".format(
+                            Fore.YELLOW + refd + Fore.RESET), options)
+                        print(f'selected {Fore.YELLOW}{face}{Fore.RESET}')
 
-                        # Save decision to database
-                        if pkgtype is not None and pid:
-                            if self._bool_prompt(f"Save '{Fore.YELLOW}{pid}{Fore.RESET}' as {Fore.YELLOW}{pkgtype}{Fore.RESET} to database?"):
-                                cur.execute('''
-                                    INSERT INTO pkgmem
-                                    VALUES ('{}', '{}', '{}')
-                                    '''.format(pid, desc, pkgtype))
-                                con.commit()
-                                print(f"saved '{Fore.YELLOW}{pid}{Fore.RESET}' to database")
+                        # Ask to repeat the selection
+                        if face and i == 0 and len(refds_list) > 1:
+                            prompt = 'Are {} all on the same side?'.format(
+                                ','.join([Fore.YELLOW + refd + Fore.RESET for refd in refds_list]))
+                            if self._bool_prompt(prompt):
+                                repeat = face
+                                print("repeating '{}' for all ref. designators in the row".format(
+                                    Fore.YELLOW + face + Fore.RESET))
 
-                if self._verbose:
-                    print(f'finished determining package type for row {i} -> {pkgtype}')
+            # Tag and append
+            if pkgtype and face:
+                tagged.append(f'#box[{refd}]<{pkgtype}{face}>')
+                print("tagged '{}' with {}".format(
+                    Fore.YELLOW + refd + Fore.RESET,
+                    Fore.YELLOW + f'<{pkgtype}{face}>' + Fore.RESET))
+            else:
+                tagged.append(f'#box[{refd}]')
+                print(f"'{Fore.YELLOW}{refd}{Fore.RESET}' is untagged")
 
-                # Build tagged reference designators list
-                refds_list = [item.strip() for item in refds.split(',')]
-                tagged_list = []
-                row_face = None
-                ask_to_repeat = True
-                if self._verbose:
-                    print(f'tagging reference designators for row {i}...')
-                for refd in refds_list:
-                    # Determine board face
-                    face = None
+        print('finished tagging reference designators')
+        return tagged
 
-                    if pkgtype:
-                        # If the row is all on the same face repeat the face assignment
-                        if row_face:
-                            face = row_face
-                            if self._verbose:
-                                print(f"repeating '{row_face}' for '{refd}'")
-
-                        # Otherwise, determine the board face
-                        else:
-                            if self._verbose:
-                                print(f"determining board face for '{refd}'...")
-
-                            # Try the pick-and-place file
-                            if self._pick_path:
-                                with open(self._pick_path, 'r') as f:
-                                    look_for_mirror = False
-                                    for line in f:
-                                        if re.search('\\bmirror\\b', line):
-                                            look_for_mirror = True
-                                        if re.search('\\b' + re.escape(refd) + '\\b', line):
-                                            if look_for_mirror:
-                                                if re.search('\\bm\\b', line):
-                                                    face = 'bot'
-                                                else:
-                                                    face = 'top'
-                                                break
-                                            if re.search('\\btop', line, re.IGNORECASE):
-                                                face = 'top'
-                                                break
-                                            if re.search('\\bbot', line, re.IGNORECASE):
-                                                face = 'bot'
-                                                break
-                                if face and self._verbose:
-                                    print(f"found face for '{refd}' in '{self._pick_path}' -> {face}")
-
-                            # lastly, prompt the user
-                            if face is None:
-                                print(f"unable to determine face for '{refd}'.")
-                                if not self._skip_prompts:
-                                    options = ['top', 'bot']
-                                    face = self._options_prompt(f"Enter face for '{refd}'", options)
-                                    print(f"selected '{Fore.YELLOW}{face}{Fore.RESET}'")
-
-                                    # Prompt user if the row is all the same
-                                    if ask_to_repeat and face and refd != refds_list[-1]:
-                                        if self._bool_prompt(f'Are [{refds}] all on the same side?'):
-                                            row_face = face
-                                            print(f"repeating '{Fore.YELLOW}{row_face}{Fore.RESET}' for all parts in the row")
-                                        ask_to_repeat = False
-
-                        if self._verbose:
-                            print(f"finished determining board face type for '{refd}' -> {face}")
-
-                    if pkgtype and face:
-                        tagged_list.append(f'#box[{refd}]<{pkgtype}{face}>')
-                        if self._verbose:
-                            print(f"tagged '{refd}' with <{pkgtype}{face}>")
-                    else:
-                        tagged_list.append(f'#box[{refd}]')
-
-                # replace the reference designators string
-                row[col['reference designator']] = ','.join(tagged_list)
-                if self._verbose:
-                    print(f'finished tagging reference designators for row {i}')
-        if self._verbose:
-            print('finished parsing table')
-
-        # Close database
-        con.close()
-
-        # Generate typst document
+    def _generate_typst_bom(self, pretable, header, table, col):
         output_path = self._output_path
         if output_path is None:
             output_path = os.path.splitext(
                 os.path.basename(self._bom_path))[0] + '_highlighted.typ'
-        if self._verbose:
-            print(f"writing to '{output_path}'...")
+
+        print(f"writing to '{Fore.CYAN}{output_path}{Fore.RESET}'...")
         dir = os.path.dirname(output_path)
         if dir:
             os.makedirs(dir, exist_ok=True)
@@ -464,7 +409,69 @@ class App:
                 f.write('\n')
             f.write(')\n')
 
-        print(f"saved to '{output_path}'")
+        print(f"finished writing to '{Fore.CYAN}{output_path}{Fore.RESET}'")
+        return output_path
+
+    def run(self):
+        # Check if files exist
+        files_exist = True
+        if not os.path.isfile(self._bom_path):
+            print(f"{Fore.RED}BOM file '{self._bom_path}' not found{Fore.RESET}")
+            files_exist = False
+        if self._pick_path:
+            if not os.path.isfile(self._pick_path):
+                print(f"{Fore.RED}pick and place file '{self._pick_path}' not found{Fore.RESET}")
+                files_exist = False
+        if not files_exist:
+            self.close()
+
+        # Read BOM file
+        pretable, header, table = self._read_bom()
+
+        print('header:', ', '.join([f'[{Fore.YELLOW}{name}{Fore.RESET}]' for name in header]))
+
+        # Find inportant column indices
+        col = self._index_cols(header)
+
+        # Connect to database
+        con = sqlite3.connect(self._settings['dbpath'])
+        cur = con.cursor()
+
+        # Parse table
+        print('parsing table...')
+        for i, row in enumerate(table):
+            rownum = self._pre_header + 2 + i
+            print(f"\n{Fore.MAGENTA}ROW {rownum}:{Fore.RESET}")
+
+            refds = row[col['reference designator']]
+            qty = row[col['quantity']]
+
+            # Convert quantities to integers
+            try:
+                row[col['quantity']] = int(qty)
+            except ValueError:
+                pass
+
+            # Highlight reference designators
+            if refds:
+                print('row contains loaded parts')
+
+                # Find package type: pth or smd
+                pkgtype = self._determine_pkgtype(header, row, col, con, cur)
+
+                # Build tagged reference designators list
+                refds_list = [item.strip() for item in refds.split(',')]
+                tagged_list = self._tag(refds_list, pkgtype)
+
+                # replace the reference designators string
+                row[col['reference designator']] = ','.join(tagged_list)
+        print('\nfinished parsing table')
+
+        # Close database
+        con.close()
+
+        # Generate typst document
+        output_path = self._generate_typst_bom(pretable, header, table, col)
         print('done')
         return output_path
 
@@ -489,13 +496,9 @@ parser.add_argument(
     '-y', '--yes',
     action='store_true',
     help='skip unrequired user prompts')
-parser.add_argument(
-    '-v', '--verbose',
-    action='store_true',
-    help='show all status messages')
 args = parser.parse_args()
 
-app = App(args.BOM, args.pick, args.output, args.pre_header, args.yes, args.verbose)
+app = App(args.BOM, args.pick, args.output, args.pre_header, args.yes)
 app.settings_init(_settings_path)
 app.database_init()
-app.generate_hbom()
+app.run()
