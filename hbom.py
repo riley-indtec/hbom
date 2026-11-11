@@ -18,11 +18,11 @@ import sys
 _settings_path = os.path.expanduser('~/.hbom/settings.json')
 
 _default_settings = {
-    'dbpath': os.path.expanduser('~/.hbom/hbom_database.db'),
+    'dbpath': os.path.expanduser('~/.hbom/saves.db'),
     'headerpatterns': {
         'description': '(component )?desc\\.?(ription)?',
         'product identifier': '(mfg\\.?|manufacturer) p(art)?[ /.]?n(um)?\\.?(ber)?',
-        'reference designator': 'ref\\.?(erence)?( designator)?',
+        'reference designator': 'ref\\.?(erence)?( designators?)?',
         'quantity': 'qty\\.?|quantity'
     },
     'highlightcolors': {
