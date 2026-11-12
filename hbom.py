@@ -254,7 +254,7 @@ class App:
         if desc:
             for pkgtype, patterns in self._settings['pkgpatterns'].items():
                 for pattern in patterns:
-                    if re.search('\\b' + pattern + '\\b', desc, re.IGNORECASE):
+                    if re.search('(\\A|\\s|,)' + pattern + '(\\Z|\\s|,)', desc, re.IGNORECASE):
                         print("description '{}' matches {} package type".format(
                             Fore.YELLOW + desc + Fore.RESET,
                             Fore.YELLOW + pkgtype + Fore.RESET))
