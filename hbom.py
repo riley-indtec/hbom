@@ -77,7 +77,7 @@ def typ_template(path, datestr, columns, pre_header, refd_col, highlight_colors)
 #set table(
   columns: {},
   fill: (_, y) => if y == {} {{ gray }},
-  align: (x, y) => if x == {} and y != {} {{left}} else {{center}},
+  align: (x, y) => if x == {} and y != {} {{ left }} else {{ center }},
 )
 
 #set table.header(repeat: true)
