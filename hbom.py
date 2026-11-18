@@ -109,10 +109,9 @@ def sml_template(path, datestr, pca_model, pca_pn):
 
 #set page(
   paper: "us-letter",
-  margin: (top: .5in, rest: .2in),
+  margin: (y: .2in + 2em, rest: .2in),
   header: [{} #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
   numbering: "1 of 1",
-  footer-descent: -1em,
 )
 
 #set text(
@@ -123,7 +122,7 @@ def sml_template(path, datestr, pca_model, pca_pn):
 #set heading(numbering: "1.")
 
 #show heading.where(level: 1): it => {{
-  set text(size: 11pt)
+  set text(size: .8em)
   underline(it)
 }}
 
@@ -743,6 +742,9 @@ class App:
                 if not components:
                     continue
                 f.write(f'\n= Set-up for {face.upper()} side\n')
+
+                # Room for notes
+                f.write('\n#v(5em) // leave room for set-up notes\n')
 
                 # Generate the table
                 f.write('\n#sml-table(\n')
