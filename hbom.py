@@ -122,7 +122,10 @@ def sml_template(path, datestr, pca_model, pca_pn):
 
 #set heading(numbering: "1.")
 
-#show heading: set text(size: 11pt)
+#show heading.where(level: 1): it => {{
+  set text(size: 11pt)
+  underline(it)
+}}
 
 #set enum(numbering: "a.")
 
@@ -274,7 +277,7 @@ class App:
 
     def _num_prompt(self, prompt, n):
         while True:
-            ans = input(f"{prompt} {Fore.GREEN}[0-{n}]{Fore.RESET} ('q' to quit): ")
+            ans = input(f"{prompt} {Fore.GREEN}[0-{n - 1}]{Fore.RESET} ('q' to quit): ")
             if ans.lower() in ['q', 'quit']:
                 self.close()
             try:
@@ -618,6 +621,59 @@ class App:
                         Fore.YELLOW + feedtype + Fore.RESET))
         return feedtype
 
+    def _pca_model_prompt(self, pretable):
+        print('PCA model...')
+
+        # Select from the pretable
+        if pretable:
+            options = []
+            for row in pretable:
+                for item in row:
+                    if item:
+                        options.append(item.lstrip("'"))
+            for i, option in enumerate(options):
+                print(f"{Fore.GREEN}{i + 1}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
+            ans = self._num_prompt(
+                f"Select the PCA model ('{Fore.GREEN}0{Fore.RESET}' to manually enter)",
+                len(options) + 1)
+            if ans != 0:
+                model = options[ans - 1]
+                print(f'selected [{Fore.YELLOW}{model}{Fore.RESET}]')
+                return model
+
+        # Otherwise, prompt the user
+        model = None
+        if not self._skip_prompts:
+            model = self._open_prompt("Manually enter PCA model")
+            print(f"entered '{Fore.YELLOW}{model}{Fore.RESET}'")
+        return model
+
+    def _pca_pn_prompt(self, pretable):
+        print('PCA part number...')
+        # Select from the pretable
+        if pretable:
+            options = []
+            for row in pretable:
+                for item in row:
+                    if item:
+                        options.append(item.lstrip("'"))
+            for i, option in enumerate(options):
+                print(f"{Fore.GREEN}{i + 1}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
+            ans = self._num_prompt(
+                f"Select the PCA part number('{Fore.GREEN}0{Fore.RESET}' to manually enter)",
+                len(options) + 1)
+            if ans != 0:
+                pn = options[ans - 1]
+                print(f'selected [{Fore.YELLOW}{pn}{Fore.RESET}]')
+                return pn
+
+        # Otherwise, prompt the user
+        pn = None
+        if not self._skip_prompts:
+            pn = self._open_prompt("Manually enter the PCA part number")
+            print(f"entered '{Fore.YELLOW}{pn}{Fore.RESET}'")
+        return pn
+
     def _generate_typst_bom(self, pretable, header, table):
         output_path = self._output_path
         if output_path is None:
@@ -656,7 +712,7 @@ class App:
         print(f"finished writing to '{Fore.CYAN}{output_path}{Fore.RESET}'")
         return output_path
 
-    def _generate_typst_sml(self, sml_components, pastes, pca_model, pca_pn):
+    def _generate_typst_sml(self, sml_components, pca_model, pca_pn):
         output_path = self._output_path
         if output_path is None:
             output_path = os.path.splitext(
@@ -668,8 +724,9 @@ class App:
             os.makedirs(dir, exist_ok=True)
         with open(output_path, 'w') as f:
             # Template
-            f.write(sml_template(output_path, datetime.now().strftime("%d %b %Y"),
-                    pca_model, pca_pn))
+            model = pca_model if pca_model else ''
+            pn = pca_pn if pca_pn else ''
+            f.write(sml_template(output_path, datetime.now().strftime("%d %b %Y"), model, pn))
 
             # Create tables
             for face in ['top', 'bot']:
@@ -677,9 +734,8 @@ class App:
                 if not components:
                     continue
                 f.write(f'\n= Set-up for {face.upper()} side\n')
-                paste = pastes[face]
-                if paste:
-                    f.write(f'\n#strong("***{paste}***")\n')
+
+                # Generate the table
                 f.write('\n#sml-table(\n')
                 for group in self._settings['smlgroups'] + [None]:
                     if group not in components:
@@ -812,25 +868,14 @@ class App:
             # Close database
             con.close()
 
-            pastes = {
-                'top': 'YSM10 Lead-Free No-Clean',
-                'bot': 'YSM10 Lead-Free No-Clean'
-            }
-
             # Get PCA model
-            pca_model = self._open_prompt("Enter PCA Model:")
-            print(f"Entered '{Fore.YELLOW}{pca_model}{Fore.RESET}'")
-            if pca_model is None:
-                pca_model = ''
+            pca_model = self._pca_model_prompt(pretable)
 
             # Get PCA part number
-            pca_pn = self._open_prompt("Enter PCA P/N:")
-            print(f"Entered '{Fore.YELLOW}{pca_pn}{Fore.RESET}'")
-            if pca_pn is None:
-                pca_pn = ''
+            pca_pn = self._pca_pn_prompt(pretable)
 
             # Generate typst document
-            output_path = self._generate_typst_sml(sml_components, pastes, pca_model, pca_pn)
+            output_path = self._generate_typst_sml(sml_components, pca_model, pca_pn)
             print('done')
             return output_path
         else:
