@@ -568,15 +568,20 @@ class App:
 
         # Otherwise, prompt the user
         group = None
-        print('unable to the component group for the following:')
+        print('unable to determine the component group for the following:')
         for key, value in zip(header, row):
             print(f'[{key}]: {Fore.YELLOW}{value}{Fore.RESET}')
         if not self._skip_prompts:
-            group = self._options_prompt(
+            print('component groups:')
+            for i, name in enumerate(groups + ['none']):
+                print(f"{Fore.GREEN}{i}{Fore.RESET}: {Fore.YELLOW}{name}{Fore.RESET}")
+            ans = self._num_prompt(
                 "Enter a group for PID: '{}', DESC: '{}'".format(
                     Fore.YELLOW + pid + Fore.RESET,
                     Fore.YELLOW + desc + Fore.RESET),
-                groups)
+                len(groups) + 1)
+            if ans < len(groups):
+                group = groups[ans]
             print(f'selected {Fore.YELLOW}{group}{Fore.RESET}')
         return group
 
@@ -632,14 +637,16 @@ class App:
                     if item:
                         options.append(item.lstrip("'"))
             for i, option in enumerate(options):
-                print(f"{Fore.GREEN}{i + 1}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
-            ans = self._num_prompt(
-                f"Select the PCA model ('{Fore.GREEN}0{Fore.RESET}' to manually enter)",
-                len(options) + 1)
-            if ans != 0:
-                model = options[ans - 1]
+                print(f"{Fore.GREEN}{i}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
+            print("{}: {}".format(
+                Fore.GREEN + f'{len(options)}' + Fore.RESET,
+                Fore.YELLOW + 'none of the above' + Fore.RESET))
+            ans = self._num_prompt('Select the PCA model', len(options) + 1)
+            if ans < len(options):
+                model = options[ans]
                 print(f'selected [{Fore.YELLOW}{model}{Fore.RESET}]')
                 return model
+            print(f'selected {Fore.YELLOW}none{Fore.RESET}')
 
         # Otherwise, prompt the user
         model = None
@@ -659,13 +666,15 @@ class App:
                         options.append(item.lstrip("'"))
             for i, option in enumerate(options):
                 print(f"{Fore.GREEN}{i + 1}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
-            ans = self._num_prompt(
-                f"Select the PCA part number('{Fore.GREEN}0{Fore.RESET}' to manually enter)",
-                len(options) + 1)
-            if ans != 0:
-                pn = options[ans - 1]
+            print("{}: {}".format(
+                Fore.GREEN + f'{len(options)}' + Fore.RESET,
+                Fore.YELLOW + 'none of the above' + Fore.RESET))
+            ans = self._num_prompt('Select the PCA part number', len(options) + 1)
+            if ans < len(options):
+                pn = options[ans]
                 print(f'selected [{Fore.YELLOW}{pn}{Fore.RESET}]')
                 return pn
+            print(f'selected {Fore.YELLOW}none{Fore.RESET}')
 
         # Otherwise, prompt the user
         pn = None
