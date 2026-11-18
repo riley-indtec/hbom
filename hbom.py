@@ -263,22 +263,32 @@ class App:
         print('exit')
         sys.exit()
 
-    def _bool_prompt(self, prompt):
+    def _bool_prompt(self, prompt, optional=False):
         while True:
-            ans = input(f"{prompt} {Fore.GREEN}[y/n]{Fore.RESET} ('q' to quit): ")
+            ans = input("{} {}[y/n]{}{} ('q' to quit): ".format(
+                prompt,
+                Fore.GREEN, Fore.RESET,
+                " ('none' to skip)" if optional else ''))
             if ans.lower() in ['q', 'quit']:
                 self.close()
+            if optional and ans.lower() in ['', 'none']:
+                return None
             if ans.lower() in ['y', 'yes']:
                 return True
             if ans.lower() in ['n', 'no']:
                 return False
             print(f"{Fore.RED}invalid answer{Fore.RESET} '{ans}'")
 
-    def _num_prompt(self, prompt, n):
+    def _num_prompt(self, prompt, n, optional=False):
         while True:
-            ans = input(f"{prompt} {Fore.GREEN}[0-{n - 1}]{Fore.RESET} ('q' to quit): ")
+            ans = input("{} {}[0-{}]{}{} ('q' to quit): ".format(
+                prompt,
+                Fore.GREEN, n - 1, Fore.RESET,
+                " ('none' to skip)" if optional else ''))
             if ans.lower() in ['q', 'quit']:
                 self.close()
+            if optional and ans.lower() in ['', 'none']:
+                return None
             try:
                 ans_int = int(ans)
                 if ans_int in range(n):
@@ -287,23 +297,28 @@ class App:
                 pass
             print(f"{Fore.RED}invalid option{Fore.RESET} '{ans}'")
 
-    def _options_prompt(self, prompt, options):
+    def _options_prompt(self, prompt, options, optional=False):
         options = [option.lower() for option in options]
         while True:
-            ans = input(f"{prompt} {Fore.GREEN}{options + ['none']}{Fore.RESET} ('q' to quit): ")
+            ans = input("{} {}{}{}{} ('q' to quit): ".format(
+                prompt,
+                Fore.GREEN, options, Fore.RESET,
+                " ('none' to skip)" if optional else ''))
             if ans.lower() in ['q', 'quit']:
                 self.close()
-            if ans.lower() == 'none':
+            if optional and ans.lower() in ['', 'none']:
                 return None
             if ans.lower() in options:
                 return ans.lower()
             print(f"{Fore.RED}invalid option{Fore.RESET} '{ans}'")
 
-    def _open_prompt(self, prompt):
-        ans = input(f"{prompt} ('none' to skip) ('q' to quit): ")
+    def _open_prompt(self, prompt, optional=False):
+        ans = input("{}{} ('q' to quit): ".format(
+            prompt,
+            " ('none' to skip)" if optional else ''))
         if ans.lower() in ['q', 'quit']:
             self.close()
-        if ans.lower() == 'none':
+        if optional and ans.lower() in ['', 'none']:
             return None
         return ans
 
@@ -393,7 +408,7 @@ class App:
                 "Give a package type for PID: '{}', DESC: '{}'".format(
                     Fore.YELLOW + pid + Fore.RESET,
                     Fore.YELLOW + desc + Fore.RESET),
-                [key for key in self._settings['pkgpatterns']])
+                [key for key in self._settings['pkgpatterns']], optional=True)
             print(f'selected {Fore.YELLOW}{pkgtype}{Fore.RESET}')
 
             # Save decision to database
@@ -462,7 +477,7 @@ class App:
             pkg = self._open_prompt(
                 "Enter a package for PID: '{}', DESC: '{}'".format(
                     Fore.YELLOW + pid + Fore.RESET,
-                    Fore.YELLOW + desc + Fore.RESET))
+                    Fore.YELLOW + desc + Fore.RESET), optional=True)
             print(f"entered '{Fore.YELLOW}{pkg}{Fore.RESET}'")
 
             # Save to database
@@ -533,7 +548,7 @@ class App:
                 if not self._skip_prompts:
                     options = ['top', 'bot']
                     face = self._options_prompt("Enter face for '{}'".format(
-                        Fore.YELLOW + refd + Fore.RESET), options)
+                        Fore.YELLOW + refd + Fore.RESET), options, optional=True)
                     print(f'selected {Fore.YELLOW}{face}{Fore.RESET}')
 
                     # Ask to repeat the selection
@@ -572,14 +587,14 @@ class App:
             print(f'[{key}]: {Fore.YELLOW}{value}{Fore.RESET}')
         if not self._skip_prompts:
             print('component groups:')
-            for i, name in enumerate(groups + ['none']):
+            for i, name in enumerate(groups):
                 print(f"{Fore.GREEN}{i}{Fore.RESET}: {Fore.YELLOW}{name}{Fore.RESET}")
             ans = self._num_prompt(
                 "Enter a group for PID: '{}', DESC: '{}'".format(
                     Fore.YELLOW + pid + Fore.RESET,
                     Fore.YELLOW + desc + Fore.RESET),
-                len(groups) + 1)
-            if ans < len(groups):
+                len(groups) + 1, optional=True)
+            if ans is not None:
                 group = groups[ans]
             print(f'selected {Fore.YELLOW}{group}{Fore.RESET}')
         return group
@@ -606,7 +621,7 @@ class App:
         print(f"unable to determine feedtype for '{Fore.YELLOW}{pkg}{Fore.RESET}' package")
         if not self._skip_prompts:
             feedtype = self._open_prompt(
-                f"Enter a feed type for '{Fore.YELLOW}{pkg}{Fore.RESET}' package")
+                f"Enter a feed type for '{Fore.YELLOW}{pkg}{Fore.RESET}' package", optional=True)
             print(f"entered '{Fore.YELLOW}{feedtype}{Fore.RESET}'")
 
             # Save to database
@@ -637,25 +652,23 @@ class App:
                         options.append(item.lstrip("'"))
             for i, option in enumerate(options):
                 print(f"{Fore.GREEN}{i}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
-            print("{}: {}".format(
-                Fore.GREEN + f'{len(options)}' + Fore.RESET,
-                Fore.YELLOW + 'none of the above' + Fore.RESET))
-            ans = self._num_prompt('Select the PCA model', len(options) + 1)
-            if ans < len(options):
+            ans = self._num_prompt('Select the PCA model', len(options), optional=True)
+            if ans is not None:
                 model = options[ans]
-                print(f'selected [{Fore.YELLOW}{model}{Fore.RESET}]')
+                print(f"selected '{Fore.YELLOW}{model}{Fore.RESET}'")
                 return model
-            print(f'selected {Fore.YELLOW}none{Fore.RESET}')
+            print(f'selected {Fore.YELLOW}None{Fore.RESET}')
 
         # Otherwise, prompt the user
         model = None
         if not self._skip_prompts:
-            model = self._open_prompt("Manually enter PCA model")
+            model = self._open_prompt("Manually enter PCA model", optional=True)
             print(f"entered '{Fore.YELLOW}{model}{Fore.RESET}'")
         return model
 
     def _pca_pn_prompt(self, pretable):
         print('PCA part number...')
+
         # Select from the pretable
         if pretable:
             options = []
@@ -665,20 +678,17 @@ class App:
                         options.append(item.lstrip("'"))
             for i, option in enumerate(options):
                 print(f"{Fore.GREEN}{i}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
-            print("{}: {}".format(
-                Fore.GREEN + f'{len(options)}' + Fore.RESET,
-                Fore.YELLOW + 'none of the above' + Fore.RESET))
-            ans = self._num_prompt('Select the PCA part number', len(options) + 1)
-            if ans < len(options):
+            ans = self._num_prompt('Select the PCA part number', len(options), optional=True)
+            if ans is not None:
                 pn = options[ans]
-                print(f'selected [{Fore.YELLOW}{pn}{Fore.RESET}]')
+                print(f"selected '{Fore.YELLOW}{pn}{Fore.RESET}'")
                 return pn
-            print(f'selected {Fore.YELLOW}none{Fore.RESET}')
+            print(f'selected {Fore.YELLOW}None{Fore.RESET}')
 
         # Otherwise, prompt the user
         pn = None
         if not self._skip_prompts:
-            pn = self._open_prompt("Manually enter the PCA part number")
+            pn = self._open_prompt("Manually enter the PCA part number", optional=True)
             print(f"entered '{Fore.YELLOW}{pn}{Fore.RESET}'")
         return pn
 
