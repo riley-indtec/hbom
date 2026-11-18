@@ -665,7 +665,7 @@ class App:
                     if item:
                         options.append(item.lstrip("'"))
             for i, option in enumerate(options):
-                print(f"{Fore.GREEN}{i + 1}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
+                print(f"{Fore.GREEN}{i}{Fore.RESET}: '{Fore.YELLOW}{option}{Fore.RESET}'")
             print("{}: {}".format(
                 Fore.GREEN + f'{len(options)}' + Fore.RESET,
                 Fore.YELLOW + 'none of the above' + Fore.RESET))
