@@ -644,7 +644,7 @@ class App:
         print('PCA model...')
 
         # Select from the pretable
-        if pretable:
+        if pretable and not self._skip_prompts:
             options = []
             for row in pretable:
                 for item in row:
@@ -670,7 +670,7 @@ class App:
         print('PCA part number...')
 
         # Select from the pretable
-        if pretable:
+        if pretable and not self._skip_prompts:
             options = []
             for row in pretable:
                 for item in row:
