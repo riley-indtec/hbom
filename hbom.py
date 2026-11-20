@@ -236,7 +236,7 @@ class App:
         # Create pkgmem table
         try:
             cur.execute('''
-                CREATE TABLE pkgtypemem (
+                CREATE TABLE pkgmem (
                     id TEXT NOT NULL UNIQUE,
                     desc TEXT,
                     pkg TEXT,
@@ -250,7 +250,8 @@ class App:
         try:
             cur.execute('''
                 CREATE TABLE feedmem (
-                    pkg TEXT NOT NULL UNIQUE,
+                    pkg TEXT UNIQUE,
+                    id TEXT UNIQUE,
                     feedtype TEXT
                 )''')
             print(f"created new table '{Fore.YELLOW}feedmem{Fore.RESET}' in database")
@@ -405,9 +406,7 @@ class App:
             print(f'[{key}]: {Fore.YELLOW}{value}{Fore.RESET}')
         if not self._skip_prompts:
             pkgtype = self._options_prompt(
-                "Give a package type for PID: '{}', DESC: '{}'".format(
-                    Fore.YELLOW + pid + Fore.RESET,
-                    Fore.YELLOW + desc + Fore.RESET),
+                'Give a package type',
                 [key for key in self._settings['pkgpatterns']], optional=True)
             print(f'selected {Fore.YELLOW}{pkgtype}{Fore.RESET}')
 
@@ -474,14 +473,11 @@ class App:
         for key, value in zip(header, row):
             print(f'[{key}]: {Fore.YELLOW}{value}{Fore.RESET}')
         if not self._skip_prompts:
-            pkg = self._open_prompt(
-                "Enter a package for PID: '{}', DESC: '{}'".format(
-                    Fore.YELLOW + pid + Fore.RESET,
-                    Fore.YELLOW + desc + Fore.RESET), optional=True)
+            pkg = self._open_prompt('Enter a package:', optional=True)
             print(f"entered '{Fore.YELLOW}{pkg}{Fore.RESET}'")
 
             # Save to database
-            if pkg is not None and pid:
+            if pkg is not None and pid is not None:
                 prompt = "Save '{}' as '{}' to database?".format(
                     Fore.YELLOW + pid + Fore.RESET,
                     Fore.YELLOW + pkg + Fore.RESET)
@@ -599,45 +595,81 @@ class App:
             print(f'selected {Fore.YELLOW}{group}{Fore.RESET}')
         return group
 
-    def _determine_feedtype(self, pkg, con, cur):
+    def _determine_feedtype(self, header, row, pkg, con, cur):
         print('determining feed type...')
+        pid = row[self._index['product identifier']]
 
-        # Try the database
-        result = cur.execute('''
-            SELECT feedtype
-            FROM feedmem
-            WHERE pkg = '{}'
-            '''.format(pkg)).fetchone()
-        if result:
-            feedtype = result[0]
-            if pkg:
-                print("found feed type '{}' for package '{}' in database".format(
-                    Fore.YELLOW + feedtype + Fore.RESET,
-                    Fore.YELLOW + pkg + Fore.RESET))
-                return feedtype
+        # Try the database using pkg
+        if pkg:
+            result = cur.execute('''
+                SELECT feedtype
+                FROM feedmem
+                WHERE pkg = '{}'
+                '''.format(pkg)).fetchone()
+            if result:
+                feedtype = result[0]
+                if pkg:
+                    print("found feed type '{}' for package '{}' in database".format(
+                        Fore.YELLOW + feedtype + Fore.RESET,
+                        Fore.YELLOW + pkg + Fore.RESET))
+                    return feedtype
+
+        # Try again using product identifier
+        if pid:
+            result = cur.execute('''
+                SELECT feedtype
+                FROM feedmem
+                WHERE id = '{}'
+                '''.format(pid)).fetchone()
+            if result:
+                feedtype = result[0]
+                if pkg:
+                    print("found feed type '{}' for product id '{}' in database".format(
+                        Fore.YELLOW + feedtype + Fore.RESET,
+                        Fore.YELLOW + pid + Fore.RESET))
+                    return feedtype
 
         # Otherwise, prompt the user
         feedtype = None
-        print(f"unable to determine feedtype for '{Fore.YELLOW}{pkg}{Fore.RESET}' package")
+        print('unable to determine feed type for the following:')
+        for key, value in zip(header, row):
+            print(f'[{key}]: {Fore.YELLOW}{value}{Fore.RESET}')
+        print(f'[Package]: {Fore.YELLOW}{pkg}{Fore.RESET}')
         if not self._skip_prompts:
-            feedtype = self._open_prompt(
-                f"Enter a feed type for '{Fore.YELLOW}{pkg}{Fore.RESET}' package", optional=True)
+            feedtype = self._open_prompt('Enter a feed type', optional=True)
             print(f"entered '{Fore.YELLOW}{feedtype}{Fore.RESET}'")
 
             # Save to database
-            if feedtype is not None:
-                prompt = "Save feed type '{}' for package '{}' to database?".format(
-                    Fore.YELLOW + feedtype + Fore.RESET,
-                    Fore.YELLOW + pkg + Fore.RESET)
-                if self._bool_prompt(prompt):
+            if feedtype is not None and (pkg is not None or pid is not None):
+                if pkg:
+                    print("{}{}{}: save for package '{}'".format(
+                        Fore.GREEN, 0, Fore.RESET,
+                        Fore.YELLOW + pkg + Fore.RESET))
+                if pid:
+                    print("{}{}{}: save for product identifier '{}'".format(
+                        Fore.GREEN, 1 if pkg else 0, Fore.RESET,
+                        Fore.YELLOW + pid + Fore.RESET))
+                prompt = "Select an option to save feed type '{}' to database?".format(
+                    Fore.YELLOW + feedtype + Fore.RESET)
+                ans = self._num_prompt(prompt, 2 if pkg and pid else 1, optional=True)
+                if ans == 0 and pkg is not None:
                     cur.execute('''
-                        INSERT INTO feedmem
+                        INSERT INTO feedmem (pkg, feedtype)
                         VALUES ('{}', '{}')
                         '''.format(pkg, feedtype))
                     con.commit()
-                    print("saved '{}' | '{}' to database".format(
-                        Fore.YELLOW + pkg + Fore.RESET,
-                        Fore.YELLOW + feedtype + Fore.RESET))
+                    print("saved feed type '{}' for package '{}'".format(
+                        Fore.YELLOW + feedtype + Fore.RESET,
+                        Fore.YELLOW + pkg + Fore.RESET))
+                if (ans == 0 and pkg is None) or ans == 1:
+                    cur.execute('''
+                        INSERT INTO feedmem (id, feedtype)
+                        VALUES ('{}', '{}')
+                        '''.format(pid, feedtype))
+                    con.commit()
+                    print("saved feed type '{}' for product identifier '{}'".format(
+                        Fore.YELLOW + feedtype + Fore.RESET,
+                        Fore.YELLOW + pid + Fore.RESET))
         return feedtype
 
     def _pca_model_prompt(self, pretable):
@@ -830,9 +862,6 @@ class App:
                     print('not smd')
                     continue
 
-                # Determine package
-                pkg = self._determine_pkg(header, row, con, cur)
-
                 # Determine faces
                 refds_list = [item.strip() for item in refds.lstrip("'").split(',')]
                 faces = self._determine_faces(refds_list) if pkgtype else [
@@ -849,6 +878,13 @@ class App:
                     print('not located on any face')
                     continue
 
+                # Determine package
+                pkg = self._determine_pkg(header, row, con, cur)
+
+                # Determine feed type
+                feedtype = None
+                feedtype = self._determine_feedtype(header, row, pkg, con, cur)
+
                 # Determine component group
                 groups = []
                 for smlgroup in self._settings['smlgroups']:
@@ -863,10 +899,6 @@ class App:
                             group = smlgroup
                             print(f"grouping with '{Fore.YELLOW}{group}{Fore.RESET}'")
                             break
-
-                feedtype = None
-                if pkg:
-                    feedtype = self._determine_feedtype(pkg, con, cur)
 
                 for face in ['top', 'bot']:
                     if len(refds_per_face[face]) == 0:
