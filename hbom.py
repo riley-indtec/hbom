@@ -779,10 +779,15 @@ class App:
             f.write(sml_template(output_path, datetime.now().strftime("%d %b %Y"), model, pn))
 
             # Create tables
+            first_table = True
             for face in ['top', 'bot']:
                 components = sml_components[face]
                 if not components:
                     continue
+
+                if not first_table:
+                    f.write('\n#pagebreak()\n')
+
                 f.write(f'\n= Set-up for {face.upper()} side\n')
 
                 # Room for notes
@@ -810,6 +815,8 @@ class App:
                     f.write(typ_indent * ' ' + '),\n')
                 f.write(')\n')
                 f.write('\n= Temp. Profile:\n')
+
+                first_table = False
 
         print(f"finished writing to '{Fore.CYAN}{output_path}{Fore.RESET}'")
         return output_path
