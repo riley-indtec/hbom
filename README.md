@@ -5,7 +5,7 @@ A PCA BOM table highlighter tool
 ## Usage
 
 ```
-usage: hbom [-h] [-x [PICK]] [-o [OUTPUT]] [-p [PRE_HEADER]] [-y] BOM
+usage: hbom [-h] [-x [PICK]] [-o [OUTPUT]] [-p [PRE_HEADER]] [-y] [--sml] BOM
 
 A PCA BOM table highlighter tool
 
@@ -20,6 +20,7 @@ options:
   -p, --pre-header [PRE_HEADER]
                         rows before the header (default: 0)
   -y, --yes             skip unrequired user prompts
+  --sml                 generate SML document
 ```
 
 ## Building with Nix commands
