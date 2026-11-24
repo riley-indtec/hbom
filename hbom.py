@@ -65,7 +65,7 @@ def hbom_template(path, datestr, columns, pre_header, refd_col, highlight_colors
   paper: "us-letter",
   flipped: true,
   margin: (top: .2in + 2em, rest: .2in),
-  header: [{} #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
+  header: [`{}` #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
   header-ascent: 1em,
 )
 
@@ -96,8 +96,8 @@ def hbom_template(path, datestr, columns, pre_header, refd_col, highlight_colors
 #table(
   table.header(
 '''.format(
-        os.path.basename(path), datestr, typstify(os.path.abspath(path)), columns, refd_col,
-        pre_header, pre_header, pre_header, pre_header, highlight_styling)
+        os.path.basename(path), datestr, os.path.abspath(path), columns, refd_col, pre_header,
+        pre_header, pre_header, pre_header, highlight_styling)
 
 
 def sml_template(path, datestr, pca_model, pca_pn):
@@ -110,7 +110,7 @@ def sml_template(path, datestr, pca_model, pca_pn):
 #set page(
   paper: "us-letter",
   margin: (y: .2in + 2em, rest: .2in),
-  header: [{} #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
+  header: [`{}` #h(1fr) #datetime.today().display("[month]/[day]/[year]")],
   numbering: "1 of 1",
 )
 
@@ -127,6 +127,8 @@ def sml_template(path, datestr, pca_model, pca_pn):
 }}
 
 #set enum(numbering: "a.")
+
+#show raw: set text(size: 1.25em)
 
 /* Templates */
 
@@ -147,6 +149,7 @@ def sml_template(path, datestr, pca_model, pca_pn):
   show table.cell.where(y: 0): strong
   show table.cell.where(y: 1): strong
   let counter = 0
+  let hand-counter = 0
   table(
     columns: 10,
     align: (x, y) => if x == 5 and y > 1 {{ left }} else {{ center }},
@@ -164,8 +167,24 @@ def sml_template(path, datestr, pca_model, pca_pn):
     ),
     ..(for (i, group) in component-groups.pos().enumerate() {{
       let rows = for comp in group {{
-        counter += 1
-        (comp.pn, comp.fd, [#counter], comp.fdtype, comp.pkg, comp.ref, comp.qty, [], [], [])
+        (
+          comp.at("pn", default: []),
+          comp.at("fd", default: []),
+          if not comp.at("hand", default: false) {{
+            counter += 1
+            [#counter]
+          }} else {{
+            hand-counter += 1
+            [H#hand-counter]
+          }},
+          comp.at("fdtype", default: []),
+          comp.at("pkg", default: []),
+          comp.at("ref", default: "").split(regex("[,\\\\s]+")).map(box).join([,]),
+          comp.at("qty", default: []),
+          comp.at("newpn", default: []),
+          comp.at("value", default: []),
+          comp.at("initial", default: []),
+        )
       }}
       if i < component-groups.len() - 1 {{ (..rows, blank-row) }}
       else {{ rows }}
@@ -181,7 +200,7 @@ def sml_template(path, datestr, pca_model, pca_pn):
 
 #initial-box
 '''.format(
-        os.path.basename(path), datestr, typstify(os.path.abspath(path)), typstify(pca_model),
+        os.path.basename(path), datestr, os.path.abspath(path), typstify(pca_model),
         typstify(pca_pn))
 
 
@@ -805,8 +824,8 @@ class App:
                             if value is None:
                                 typ_keyvals.append(f'{key}: []')
                             elif type(value) is list:
-                                fval = ','.join([f'#box[{x}]' for x in value])
-                                typ_keyvals.append(f'{key}: [{fval}]')
+                                fval = ','.join(value)
+                                typ_keyvals.append(f'{key}: "{fval}"')
                             elif type(value) is str:
                                 typ_keyvals.append(f'{key}: [{typstify(value)}]')
                             else:
