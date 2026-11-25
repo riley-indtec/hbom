@@ -74,6 +74,8 @@ def hbom_template(path, datestr, columns, pre_header, refd_col, highlight_colors
   size: 8pt,
 )
 
+#show raw: set text(size: 1.25em)
+
 /* Table styling */
 
 #set table(
