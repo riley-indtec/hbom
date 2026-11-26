@@ -540,7 +540,7 @@ class App:
                     for line in f:
                         if re.search('\\bmirror\\b', line):
                             look_for_mirror = True
-                        if re.search('(^|\\s)' + re.escape(refd) + '\\s', line):
+                        if re.search('(^|\\s|,)' + re.escape(refd) + '(\\s|,)', line):
                             if look_for_mirror:
                                 if re.search('\\bm\\b', line):
                                     face = 'bot'
